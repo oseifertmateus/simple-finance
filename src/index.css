@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-sf-surface text-sf-text antialiased;
+}
+
+.sf-card {
+  @apply bg-sf-surface-elevated border border-sf-border rounded-xl shadow-sf-card;
+}
+
+.sf-input {
+  @apply w-full rounded-lg border border-sf-border bg-sf-surface-elevated px-3 py-2 text-sm text-sf-text placeholder-sf-muted outline-none focus:border-sf-primary-500 focus:ring-2 focus:ring-sf-primary-500/40;
+}
+
+.sf-label {
+  @apply text-sm font-medium text-sf-muted;
+}
+
+.sf-button-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg bg-sf-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:bg-sf-primary-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-primary-500/60 disabled:cursor-not-allowed disabled:opacity-60;
+}
+
+.sf-button-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-sm font-semibold text-sf-muted transition hover:border-sf-border hover:bg-sf-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-primary-500/40;
+}
+
+.sf-badge {
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium;
+}
