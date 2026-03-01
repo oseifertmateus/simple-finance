@@ -1,49 +1,43 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { supabase } from "../../../supabase/client";
+
+function generateTempPassword(): string {
+  return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+}
 
 export function RegisterPage() {
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [confirmarSenha, setConfirmarSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (senha !== confirmarSenha) {
-      setError("As senhas não coincidem.");
-      return;
-    }
-
     setLoading(true);
+    const redirectUrl = `${window.location.origin}/complete-registration`;
     const { error: signUpError } = await supabase.auth.signUp({
       email,
-      password: senha,
+      password: generateTempPassword(),
       options: {
         data: {
           full_name: nome,
+          needs_password_set: true,
         },
+        emailRedirectTo: redirectUrl,
       },
     });
     setLoading(false);
 
     if (signUpError) {
-      setError("Não foi possível criar sua conta. Tente novamente.");
+      setError("Não foi possível enviar o link de confirmação. Tente novamente.");
       return;
     }
 
     setSuccess(true);
-  }
-
-  function closeSuccess() {
-    setSuccess(false);
-    navigate("/login");
   }
 
   return (
@@ -86,41 +80,10 @@ export function RegisterPage() {
           />
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <label className="sf-label" htmlFor="senha">
-              Senha
-            </label>
-            <input
-              id="senha"
-              type="password"
-              required
-              className="sf-input"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              placeholder="Crie uma senha segura"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="sf-label" htmlFor="confirmar-senha">
-              Confirmar senha
-            </label>
-            <input
-              id="confirmar-senha"
-              type="password"
-              required
-              className="sf-input"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
-              placeholder="Repita a senha"
-            />
-          </div>
-        </div>
-
         {error ? <p className="text-xs text-sf-danger">{error}</p> : null}
 
         <button type="submit" className="sf-button-primary w-full" disabled={loading}>
-          {loading ? "Criando conta..." : "Criar conta"}
+          {loading ? "Enviando link..." : "Continuar"}
         </button>
 
         <p className="text-center text-xs text-sf-muted">
@@ -134,15 +97,26 @@ export function RegisterPage() {
       {success ? (
         <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 px-4">
           <div className="sf-card max-w-sm px-6 py-5">
-            <h3 className="text-sm font-semibold text-white">Conta criada com sucesso</h3>
+            <h3 className="text-sm font-semibold text-white">Verifique seu email</h3>
             <p className="mt-2 text-xs text-sf-muted">
-              Sua conta foi criada. Confirme seu email (se configurado no Supabase) e volte para
-              a tela de login para acessar o Simple Finance.
+              Enviamos um link de confirmação para <strong className="text-white">{email}</strong>.
+            </p>
+            <p className="mt-2 text-xs text-sf-muted">
+              Clique no link recebido para validar seu email e continuar o cadastro. Se não
+              aparecer na caixa de entrada, confira o <strong>spam</strong> ou a pasta de
+              promoções.
+            </p>
+            <p className="mt-2 text-xs text-sf-muted">
+              Após clicar no link, você será redirecionado para criar sua senha e concluir o
+              cadastro.
             </p>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" className="sf-button-primary" onClick={closeSuccess}>
-                Voltar para login
-              </button>
+              <Link
+                to="/login"
+                className="sf-button-primary inline-block px-4 py-2 text-center text-sm"
+              >
+                Ir para login
+              </Link>
             </div>
           </div>
         </div>

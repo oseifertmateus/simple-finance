@@ -9,8 +9,10 @@ import { AppLayout } from "./ui/layouts/AppLayout";
 import { LoginPage } from "./ui/pages/auth/LoginPage";
 import { RegisterPage } from "./ui/pages/auth/RegisterPage";
 import { ForgotPasswordPage } from "./ui/pages/auth/ForgotPasswordPage";
+import { CompleteRegistrationPage } from "./ui/pages/auth/CompleteRegistrationPage";
 import { DashboardPage } from "./ui/pages/dashboard/DashboardPage";
 import { SettingsPage } from "./ui/pages/settings/SettingsPage";
+import { CreditCardsPage } from "./ui/pages/credit-cards/CreditCardsPage";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -20,6 +22,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           <Route element={<AuthLayout />}>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
+            <Route path="/complete-registration" element={<CompleteRegistrationPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           </Route>
 
@@ -33,6 +36,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
           >
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="cartoes" element={<CreditCardsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

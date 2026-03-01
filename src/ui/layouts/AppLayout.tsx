@@ -38,6 +38,20 @@ export function AppLayout() {
           </NavLink>
 
           <NavLink
+            to="/cartoes"
+            className={({ isActive }) =>
+              `flex items-center gap-2 rounded-lg px-3 py-2.5 transition ${
+                isActive
+                  ? "bg-sf-primary-600/15 text-sf-primary-200"
+                  : "text-sf-muted hover:bg-sf-surface-elevated"
+              }`
+            }
+          >
+            <span className="h-5 w-5 rounded-md bg-sf-primary-600/20" />
+            Cartões de Crédito
+          </NavLink>
+
+          <NavLink
             to="/settings"
             className={({ isActive }) =>
               `flex items-center gap-2 rounded-lg px-3 py-2.5 transition ${

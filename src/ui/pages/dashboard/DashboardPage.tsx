@@ -1,11 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../supabase/client";
 import { useSupabaseSession } from "../../../supabase/SupabaseProvider";
+import { getBillingCycleDates } from "../../../utils/billingCycle";
 
 type TipoMovimento = "entrada" | "saida" | "investimento";
 
+type MetodoPagamento = "Dinheiro" | "Valor em conta" | "Cartão de Crédito";
+
 type CategoriaSaida = "Moradia" | "Alimentação" | "Transporte" | "Lazer";
 type CategoriaEntrada = "Salário" | "Renda extra";
+
+type CreditCard = {
+  id: string;
+  user_id: string;
+  name: string;
+  bank: string;
+  limit_amount: number;
+  due_day: number;
+  closing_day: number;
+};
 
 type Transacao = {
   id: string;
@@ -15,6 +28,8 @@ type Transacao = {
   categoriaPai: CategoriaSaida | CategoriaEntrada;
   subcategoria?: string;
   valor: number;
+  payment_method?: MetodoPagamento | null;
+  credit_card_id?: string | null;
 };
 
 const SUBCATEGORIAS_SAIDA: Record<CategoriaSaida, string[]> = {
@@ -42,6 +57,8 @@ type TransactionsRow = {
   subcategoria?: string | null;
   amount?: number;
   valor?: number;
+  payment_method?: string | null;
+  credit_card_id?: string | null;
 };
 
 type FiltroTipo = "todos" | "entrada" | "saida" | "investimento";
@@ -61,15 +78,20 @@ export function DashboardPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   const [novoModalAberto, setNovoModalAberto] = useState(false);
-  const [novoForm, setNovoForm] = useState<Omit<Transacao, "id">>({
+  const [novoForm, setNovoForm] = useState<
+    Omit<Transacao, "id"> & { payment_method: MetodoPagamento }
+  >({
     nome: "",
     data: new Date().toISOString().slice(0, 10),
     tipo: "saida",
     categoriaPai: "Alimentação",
     subcategoria: "",
     valor: 0,
+    payment_method: "Dinheiro",
+    credit_card_id: null,
   });
 
+  const [cartoesCredito, setCartoesCredito] = useState<CreditCard[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
 
@@ -99,6 +121,20 @@ export function DashboardPage() {
     }
 
     void carregarTransacoes();
+  }, [session]);
+
+  useEffect(() => {
+    async function carregarCartoes() {
+      if (!session) return;
+      const { data } = await supabase
+        .from("credit_cards")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("name", { ascending: true });
+      setCartoesCredito((data ?? []) as CreditCard[]);
+    }
+
+    void carregarCartoes();
   }, [session]);
 
   const valores = useMemo(() => {
@@ -143,12 +179,18 @@ export function DashboardPage() {
     setModalTransacao(null);
   }
 
-  function handleUpdateTransacao(campo: keyof Transacao, valor: string | number | TipoMovimento) {
+  function handleUpdateTransacao(
+    campo: keyof Transacao,
+    valor: string | number | TipoMovimento | MetodoPagamento | null,
+  ) {
     if (!modalTransacao) return;
     let atualizado: Transacao = { ...modalTransacao, [campo]: valor };
 
     if (campo === "tipo" && valor !== "saida") {
       atualizado = { ...atualizado, subcategoria: undefined };
+    }
+    if (campo === "payment_method" && valor !== "Cartão de Crédito") {
+      atualizado = { ...atualizado, credit_card_id: null };
     }
 
     setModalTransacao(atualizado);
@@ -163,6 +205,9 @@ export function DashboardPage() {
         category: atualizado.categoriaPai,
         subcategory: atualizado.tipo === "saida" ? atualizado.subcategoria ?? null : null,
         amount: atualizado.valor,
+        payment_method: atualizado.payment_method ?? null,
+        credit_card_id:
+          atualizado.payment_method === "Cartão de Crédito" ? atualizado.credit_card_id : null,
       })
       .eq("id", atualizado.id)
       .then(({ error }) => {
@@ -202,7 +247,42 @@ export function DashboardPage() {
       });
   }
 
+  function getUsoFaturaCartao(creditCardId: string, closingDay: number): number {
+    const { start, end } = getBillingCycleDates(closingDay);
+    return transacoes
+      .filter(
+        (t) =>
+          t.credit_card_id === creditCardId &&
+          t.tipo === "saida" &&
+          t.data >= start &&
+          t.data <= end,
+      )
+      .reduce((acc, t) => acc + Math.abs(t.valor), 0);
+  }
+
+  function getDisponivelCartao(card: CreditCard): number {
+    const uso = getUsoFaturaCartao(card.id, card.closing_day);
+    return Math.max(0, Number(card.limit_amount) - uso);
+  }
+
+  const cartaoSelecionado = useMemo(() => {
+    if (!novoForm.credit_card_id) return null;
+    return cartoesCredito.find((c) => c.id === novoForm.credit_card_id) ?? null;
+  }, [novoForm.credit_card_id, cartoesCredito]);
+
+  const limiteExcedido =
+    novoForm.payment_method === "Cartão de Crédito" &&
+    cartaoSelecionado !== null &&
+    novoForm.valor > 0 &&
+    novoForm.valor + getUsoFaturaCartao(cartaoSelecionado.id, cartaoSelecionado.closing_day) >
+      Number(cartaoSelecionado.limit_amount);
+
   function abrirNovoModal() {
+    setNovoForm((f) => ({
+      ...f,
+      payment_method: "Dinheiro",
+      credit_card_id: null,
+    }));
     setNovoModalAberto(true);
   }
 
@@ -211,7 +291,7 @@ export function DashboardPage() {
   }
 
   function salvarNovaTransacao() {
-    if (!session) return;
+    if (!session || limiteExcedido) return;
 
     void supabase
       .from("transactions")
@@ -223,6 +303,9 @@ export function DashboardPage() {
         category: novoForm.categoriaPai,
         subcategory: novoForm.tipo === "saida" ? novoForm.subcategoria ?? null : null,
         amount: novoForm.valor,
+        payment_method: novoForm.payment_method,
+        credit_card_id:
+          novoForm.payment_method === "Cartão de Crédito" ? novoForm.credit_card_id : null,
       })
       .select("*")
       .single()
@@ -283,7 +366,7 @@ export function DashboardPage() {
       </section>
 
       <section className="sf-card">
-        <div className="flex flex-col gap-4 border-b border-sf-border px  -6 py-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-4 border-b border-sf-border px-6 py-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-white">Extrato geral</h2>
             <p className="text-xs text-sf-muted">
@@ -534,6 +617,45 @@ export function DashboardPage() {
                   </select>
                 </div>
               ) : null}
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="sf-label">Método de Pagamento</label>
+                <select
+                  className="sf-input"
+                  value={modalTransacao.payment_method ?? "Dinheiro"}
+                  onChange={(e) => {
+                    const v = e.target.value as MetodoPagamento;
+                    handleUpdateTransacao("payment_method", v);
+                  }}
+                >
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Valor em conta">Valor em conta</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                </select>
+              </div>
+
+              {modalTransacao.payment_method === "Cartão de Crédito" ? (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="sf-label">Cartão de Crédito</label>
+                  <select
+                    className="sf-input"
+                    value={modalTransacao.credit_card_id ?? ""}
+                    onChange={(e) =>
+                      handleUpdateTransacao(
+                        "credit_card_id",
+                        e.target.value || null,
+                      )
+                    }
+                  >
+                    <option value="">Selecione o cartão</option>
+                    {cartoesCredito.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} - {c.bank}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-4 flex items-center justify-between">
@@ -606,6 +728,63 @@ export function DashboardPage() {
                 </select>
               </div>
 
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="sf-label">Método de Pagamento</label>
+                <select
+                  className="sf-input"
+                  value={novoForm.payment_method}
+                  onChange={(e) => {
+                    const v = e.target.value as MetodoPagamento;
+                    setNovoForm((f) => ({
+                      ...f,
+                      payment_method: v,
+                      credit_card_id: v === "Cartão de Crédito" ? f.credit_card_id : null,
+                    }));
+                  }}
+                >
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Valor em conta">Valor em conta</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                </select>
+              </div>
+
+              {novoForm.payment_method === "Cartão de Crédito" ? (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="sf-label">Cartão de Crédito</label>
+                  <select
+                    className="sf-input"
+                    value={novoForm.credit_card_id ?? ""}
+                    onChange={(e) =>
+                      setNovoForm((f) => ({
+                        ...f,
+                        credit_card_id: e.target.value || null,
+                      }))
+                    }
+                  >
+                    <option value="">Selecione o cartão</option>
+                    {cartoesCredito.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} - {c.bank}
+                      </option>
+                    ))}
+                  </select>
+                  {cartaoSelecionado ? (
+                    limiteExcedido ? (
+                      <p className="mt-1 text-xs text-sf-danger">
+                        Limite insuficiente. Por favor, selecione outro cartão ou método
+                        de pagamento.
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-sf-muted">
+                        Você possui R${" "}
+                        {getDisponivelCartao(cartaoSelecionado).toLocaleString("pt-BR")}{" "}
+                        disponíveis
+                      </p>
+                    )
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="space-y-1.5">
                 <label className="sf-label">Valor</label>
                 <input
@@ -675,7 +854,8 @@ export function DashboardPage() {
               </button>
               <button
                 type="button"
-                className="sf-button-primary text-xs"
+                className="sf-button-primary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={limiteExcedido}
                 onClick={salvarNovaTransacao}
               >
                 Salvar
@@ -729,6 +909,7 @@ function mapRowToTransacao(row: TransactionsRow): Transacao {
     (row.category ?? row.parent_category ?? row.categoria_pai ?? "Alimentação") as
       | CategoriaSaida
       | CategoriaEntrada;
+  const paymentMethod = (row.payment_method ?? null) as MetodoPagamento | null;
 
   return {
     id: row.id,
@@ -738,6 +919,8 @@ function mapRowToTransacao(row: TransactionsRow): Transacao {
     categoriaPai: categoria,
     subcategoria: (row.subcategory ?? row.subcategoria ?? undefined) ?? undefined,
     valor: (row.amount ?? row.valor ?? 0) as number,
+    payment_method: paymentMethod ?? undefined,
+    credit_card_id: row.credit_card_id ?? null,
   };
 }
 

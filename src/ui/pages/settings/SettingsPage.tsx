@@ -1,60 +1,175 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "../../../supabase/client";
+import { useSupabaseSession } from "../../../supabase/SupabaseProvider";
+import { Toast } from "../../components/Toast";
+
+type ToastState = { message: string; type: "success" | "error" } | null;
+
+type UsersProfileRow = {
+  id: string;
+  name: string | null;
+  email: string;
+};
 
 export function SettingsPage() {
+  const { session } = useSupabaseSession();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [novoEmail, setNovoEmail] = useState("");
   const [senhaAtual, setSenhaAtual] = useState("");
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarNovaSenha, setConfirmarNovaSenha] = useState("");
-  const [mensagem, setMensagem] = useState<string | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+  const [loadingPerfil, setLoadingPerfil] = useState(false);
+  const [loadingEmail, setLoadingEmail] = useState(false);
+  const [loadingSenha, setLoadingSenha] = useState(false);
+  const [loadingInicial, setLoadingInicial] = useState(true);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  function showToast(message: string, type: "success" | "error") {
+    setToast({ message, type });
+  }
+
+  function clearToast() {
+    setToast(null);
+  }
+
+  useEffect(() => {
+    async function carregarDados() {
+      if (!session) {
+        setLoadingInicial(false);
+        return;
+      }
+      setLoadingInicial(true);
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoadingInicial(false);
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("users_profile")
+        .select("name, email")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profile) {
+        setNome((profile as UsersProfileRow).name ?? "");
+        setEmail((profile as UsersProfileRow).email ?? user.email ?? "");
+      } else {
+        setNome(user.user_metadata?.full_name ?? "");
+        setEmail(user.email ?? "");
+      }
+
+      setLoadingInicial(false);
+    }
+
+    void carregarDados();
+  }, [session]);
 
   async function handleSalvarPerfil(e: FormEvent) {
     e.preventDefault();
-    setErro(null);
-    setMensagem(null);
-    const { error } = await supabase.auth.updateUser({
-      data: { full_name: nome },
-    });
-    if (error) {
-      setErro("Não foi possível atualizar os dados cadastrais.");
-      return;
+    if (!session) return;
+
+    setLoadingPerfil(true);
+    try {
+      const { error } = await supabase
+        .from("users_profile")
+        .upsert(
+          { id: session.user.id, name: nome, email: session.user.email ?? email },
+          { onConflict: "id" }
+        );
+
+      if (error) throw error;
+
+      await supabase.auth.updateUser({ data: { full_name: nome } });
+      showToast("Nome atualizado com sucesso!", "success");
+    } catch {
+      showToast("Não foi possível atualizar o nome. Tente novamente.", "error");
+    } finally {
+      setLoadingPerfil(false);
     }
-    setMensagem("Dados atualizados com sucesso.");
   }
 
   async function handleAlterarEmail(e: FormEvent) {
     e.preventDefault();
-    setErro(null);
-    setMensagem(null);
-    const { error } = await supabase.auth.updateUser({
-      email: novoEmail,
-    });
-    if (error) {
-      setErro("Não foi possível alterar o email.");
-      return;
+    if (!session || !novoEmail.trim()) return;
+
+    setLoadingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: novoEmail.trim() });
+      if (error) throw error;
+
+      const { error: updateProfile } = await supabase
+        .from("users_profile")
+        .update({ email: novoEmail.trim() })
+        .eq("id", session.user.id);
+
+      if (updateProfile) {
+        await supabase
+          .from("users_profile")
+          .upsert(
+            { id: session.user.id, name: nome, email: novoEmail.trim() },
+            { onConflict: "id" }
+          );
+      }
+
+      setEmail(novoEmail.trim());
+      setNovoEmail("");
+      showToast("Alteração solicitada. Confirme no novo endereço, se necessário.", "success");
+    } catch {
+      showToast("Não foi possível alterar o email. Tente novamente.", "error");
+    } finally {
+      setLoadingEmail(false);
     }
-    setMensagem("Email atualizado. Confirme no novo endereço, se necessário.");
   }
 
   async function handleAlterarSenha(e: FormEvent) {
     e.preventDefault();
-    setErro(null);
-    setMensagem(null);
+    if (!session) return;
+
     if (novaSenha !== confirmarNovaSenha) {
-      setErro("As senhas não coincidem.");
+      showToast("As senhas não coincidem.", "error");
       return;
     }
-    const { error } = await supabase.auth.updateUser({
-      password: novaSenha,
-    });
-    if (error) {
-      setErro("Não foi possível alterar a senha.");
+
+    if (novaSenha.length < 6) {
+      showToast("A nova senha deve ter pelo menos 6 caracteres.", "error");
       return;
     }
-    setMensagem("Senha alterada com sucesso.");
+
+    setLoadingSenha(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: session.user.email ?? "",
+        password: senhaAtual,
+      });
+      if (signInError) {
+        showToast("Senha atual incorreta.", "error");
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: novaSenha });
+      if (error) throw error;
+
+      setSenhaAtual("");
+      setNovaSenha("");
+      setConfirmarNovaSenha("");
+      showToast("Senha atualizada com sucesso!", "success");
+    } catch {
+      showToast("Não foi possível atualizar a senha. Tente novamente.", "error");
+    } finally {
+      setLoadingSenha(false);
+    }
+  }
+
+  if (loadingInicial) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-12">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-sf-primary-400 border-t-transparent" />
+        <p className="text-sm text-sf-muted">Carregando configurações...</p>
+      </div>
+    );
   }
 
   return (
@@ -85,16 +200,20 @@ export function SettingsPage() {
           <div className="space-y-1.5">
             <label className="sf-label">Email atual (somente leitura)</label>
             <input
-              className="sf-input"
+              className="sf-input read-only:opacity-90 read-only:cursor-default"
+              type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="email@atual.com"
               readOnly
+              placeholder="email@atual.com"
             />
           </div>
 
-          <button type="submit" className="sf-button-primary w-fit text-xs">
-            Salvar dados
+          <button
+            type="submit"
+            className="sf-button-primary w-fit text-xs"
+            disabled={loadingPerfil}
+          >
+            {loadingPerfil ? "Salvando..." : "Salvar dados"}
           </button>
         </form>
       </section>
@@ -106,6 +225,16 @@ export function SettingsPage() {
         </p>
         <form onSubmit={handleAlterarEmail} className="mt-4 grid gap-3 sm:max-w-md">
           <div className="space-y-1.5">
+            <label className="sf-label">Email atual</label>
+            <input
+              className="sf-input read-only:opacity-90 read-only:cursor-default"
+              type="email"
+              value={email}
+              readOnly
+              placeholder="email@atual.com"
+            />
+          </div>
+          <div className="space-y-1.5">
             <label className="sf-label">Novo email</label>
             <input
               className="sf-input"
@@ -116,8 +245,12 @@ export function SettingsPage() {
             />
           </div>
 
-          <button type="submit" className="sf-button-primary w-fit text-xs">
-            Atualizar email
+          <button
+            type="submit"
+            className="sf-button-primary w-fit text-xs"
+            disabled={loadingEmail || !novoEmail.trim()}
+          >
+            {loadingEmail ? "Salvando..." : "Atualizar email"}
           </button>
         </form>
       </section>
@@ -160,14 +293,19 @@ export function SettingsPage() {
             />
           </div>
 
-          {erro ? <p className="text-xs text-sf-danger">{erro}</p> : null}
-          {mensagem ? <p className="text-xs text-sf-success">{mensagem}</p> : null}
-
-          <button type="submit" className="sf-button-primary w-fit text-xs">
-            Atualizar senha
+          <button
+            type="submit"
+            className="sf-button-primary w-fit text-xs"
+            disabled={loadingSenha}
+          >
+            {loadingSenha ? "Salvando..." : "Atualizar senha"}
           </button>
         </form>
       </section>
+
+      {toast && (
+        <Toast message={toast.message} type={toast.type} onClose={clearToast} />
+      )}
     </div>
   );
 }
