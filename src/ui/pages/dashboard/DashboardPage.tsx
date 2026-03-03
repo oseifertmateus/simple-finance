@@ -71,7 +71,10 @@ export function DashboardPage() {
   const [filtroSubcategoria, setFiltroSubcategoria] = useState<string>("");
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
+  const [filtroMetodoPagamento, setFiltroMetodoPagamento] = useState<MetodoPagamento | "">("");
+  const [filtroCartaoCredito, setFiltroCartaoCredito] = useState<string>("");
 
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
   const [modalAberto, setModalAberto] = useState(false);
   const [modalTransacao, setModalTransacao] = useState<Transacao | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -164,10 +167,22 @@ export function DashboardPage() {
           if (filtroSubcategoria && t.subcategoria !== filtroSubcategoria) return false;
         }
 
+        if (filtroMetodoPagamento && t.payment_method !== filtroMetodoPagamento) return false;
+        if (filtroCartaoCredito && t.credit_card_id !== filtroCartaoCredito) return false;
+
         return true;
       })
       .sort((a, b) => (a.data < b.data ? 1 : -1));
-  }, [transacoes, filtroTipo, dataInicio, dataFim, filtroCategoriaSaida, filtroSubcategoria]);
+  }, [
+    transacoes,
+    filtroTipo,
+    dataInicio,
+    dataFim,
+    filtroCategoriaSaida,
+    filtroSubcategoria,
+    filtroMetodoPagamento,
+    filtroCartaoCredito,
+  ]);
 
   function abrirModalDetalhe(transacao: Transacao) {
     setModalTransacao(transacao);
@@ -366,95 +381,141 @@ export function DashboardPage() {
       </section>
 
       <section className="sf-card">
-        <div className="flex flex-col gap-4 border-b border-sf-border px-6 py-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-white">Extrato geral</h2>
-            <p className="text-xs text-sf-muted">
-              Itens mais recentes aparecem primeiro. Clique para ver detalhes e editar.
-            </p>
+        <div className="border-b border-sf-border px-6 py-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-white">Extrato geral</h2>
+              <p className="text-xs text-sf-muted">
+                Itens mais recentes aparecem primeiro. Clique para ver detalhes e editar.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="sf-button-outline w-fit text-xs"
+              onClick={() => setFiltrosAbertos((aberto) => !aberto)}
+              aria-expanded={filtrosAbertos}
+            >
+              Filtro
+            </button>
           </div>
-          <div className="flex flex-wrap gap-3 text-xs">
-            <div className="space-y-1">
-              <span className="sf-label">Intervalo de datas</span>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  className="sf-input max-w-[140px]"
-                  value={dataInicio}
-                  onChange={(e) => setDataInicio(e.target.value)}
-                />
-                <input
-                  type="date"
-                  className="sf-input max-w-[140px]"
-                  value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="sf-label">Tipo</span>
-              <select
-                className="sf-input max-w-[150px]"
-                value={filtroTipo}
-                onChange={(e) => {
-                  const v = e.target.value as FiltroTipo;
-                  setFiltroTipo(v);
-                  if (v !== "saida") {
-                    setFiltroCategoriaSaida("");
-                    setFiltroSubcategoria("");
-                  }
-                }}
-              >
-                <option value="todos">Todos</option>
-                <option value="entrada">Entradas</option>
-                <option value="saida">Saídas</option>
-                <option value="investimento">Investimentos</option>
-              </select>
-            </div>
-
-            {filtroTipo === "saida" ? (
-              <>
-                <div className="space-y-1">
-                  <span className="sf-label">Categoria</span>
-                  <select
-                    className="sf-input max-w-[150px]"
-                    value={filtroCategoriaSaida}
-                    onChange={(e) => {
-                      const v = e.target.value as CategoriaSaida | "";
-                      setFiltroCategoriaSaida(v);
-                      setFiltroSubcategoria("");
-                    }}
-                  >
-                    <option value="">Todas</option>
-                    {Object.keys(SUBCATEGORIAS_SAIDA).map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
+          {filtrosAbertos ? (
+            <div className="mt-4 flex flex-wrap gap-3 border-t border-sf-border pt-4 text-xs">
+              <div className="space-y-1">
+                <span className="sf-label">Intervalo de datas</span>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    className="sf-input max-w-[140px]"
+                    value={dataInicio}
+                    onChange={(e) => setDataInicio(e.target.value)}
+                  />
+                  <input
+                    type="date"
+                    className="sf-input max-w-[140px]"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                  />
                 </div>
+              </div>
 
-                {filtroCategoriaSaida ? (
+              <div className="space-y-1">
+                <span className="sf-label">Tipo</span>
+                <select
+                  className="sf-input max-w-[150px]"
+                  value={filtroTipo}
+                  onChange={(e) => {
+                    const v = e.target.value as FiltroTipo;
+                    setFiltroTipo(v);
+                    if (v !== "saida") {
+                      setFiltroCategoriaSaida("");
+                      setFiltroSubcategoria("");
+                    }
+                  }}
+                >
+                  <option value="todos">Todos</option>
+                  <option value="entrada">Entradas</option>
+                  <option value="saida">Saídas</option>
+                  <option value="investimento">Investimentos</option>
+                </select>
+              </div>
+
+              {filtroTipo === "saida" ? (
+                <>
                   <div className="space-y-1">
-                    <span className="sf-label">Subcategoria</span>
+                    <span className="sf-label">Categoria</span>
                     <select
                       className="sf-input max-w-[150px]"
-                      value={filtroSubcategoria}
-                      onChange={(e) => setFiltroSubcategoria(e.target.value)}
+                      value={filtroCategoriaSaida}
+                      onChange={(e) => {
+                        const v = e.target.value as CategoriaSaida | "";
+                        setFiltroCategoriaSaida(v);
+                        setFiltroSubcategoria("");
+                      }}
                     >
                       <option value="">Todas</option>
-                      {SUBCATEGORIAS_SAIDA[filtroCategoriaSaida].map((sub) => (
-                        <option key={sub} value={sub}>
-                          {sub}
+                      {Object.keys(SUBCATEGORIAS_SAIDA).map((cat) => (
+                        <option key={cat} value={cat}>
+                          {cat}
                         </option>
                       ))}
                     </select>
                   </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
+
+                  {filtroCategoriaSaida ? (
+                    <div className="space-y-1">
+                      <span className="sf-label">Subcategoria</span>
+                      <select
+                        className="sf-input max-w-[150px]"
+                        value={filtroSubcategoria}
+                        onChange={(e) => setFiltroSubcategoria(e.target.value)}
+                      >
+                        <option value="">Todas</option>
+                        {SUBCATEGORIAS_SAIDA[filtroCategoriaSaida].map((sub) => (
+                          <option key={sub} value={sub}>
+                            {sub}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              <div className="space-y-1">
+                <span className="sf-label">Método de pagamento</span>
+                <select
+                  className="sf-input max-w-[150px]"
+                  value={filtroMetodoPagamento}
+                  onChange={(e) => {
+                    const v = e.target.value as MetodoPagamento | "";
+                    setFiltroMetodoPagamento(v);
+                    if (v !== "Cartão de Crédito") setFiltroCartaoCredito("");
+                  }}
+                >
+                  <option value="">Todos</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Valor em conta">Valor em conta</option>
+                  <option value="Cartão de Crédito">Cartão de Crédito</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <span className="sf-label">Cartão de crédito</span>
+                <select
+                  className="sf-input max-w-[180px]"
+                  value={filtroCartaoCredito}
+                  onChange={(e) => setFiltroCartaoCredito(e.target.value)}
+                >
+                  <option value="">Todos</option>
+                  {cartoesCredito.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.bank ? `(${c.bank})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="overflow-x-auto">
@@ -474,6 +535,8 @@ export function DashboardPage() {
                   <th className="px-4 py-3">Tipo</th>
                   <th className="px-4 py-3">Categoria</th>
                   <th className="px-4 py-3">Subcategoria</th>
+                  <th className="px-4 py-3">Método de pagamento</th>
+                  <th className="px-4 py-3">Cartão utilizado</th>
                   <th className="px-4 py-3 text-right">Valor (R$)</th>
                 </tr>
               </thead>
@@ -492,6 +555,14 @@ export function DashboardPage() {
                     <td className="px-4 py-3 text-[12px] text-sf-muted">
                       {t.tipo === "entrada" ? "—" : t.subcategoria ?? "—"}
                     </td>
+                    <td className="px-4 py-3 text-[12px] text-sf-muted">
+                      {t.payment_method ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-sf-muted">
+                      {t.credit_card_id
+                        ? cartoesCredito.find((c) => c.id === t.credit_card_id)?.name ?? "—"
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3 text-right text-[13px] font-medium text-sf-text">
                       {t.valor.toLocaleString("pt-BR", {
                         style: "currency",
@@ -503,7 +574,7 @@ export function DashboardPage() {
                 {transacoesFiltradas.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={7}
                       className="px-4 py-6 text-center text-[12px] text-sf-muted/80"
                     >
                       Nenhuma transação encontrada para os filtros selecionados.
