@@ -1,15 +1,29 @@
-import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../../supabase/client";
 
+function isRecoveryFlow(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.hash.includes("type=recovery");
+}
+
 export function ForgotPasswordPage() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
-  const [step, setStep] = useState<"email" | "reset">("email");
+  const [step, setStep] = useState<"email" | "reset">(() =>
+    isRecoveryFlow() ? "reset" : "email"
+  );
   const [novaSenha, setNovaSenha] = useState("");
   const [confirmarNovaSenha, setConfirmarNovaSenha] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (step === "reset" && isRecoveryFlow()) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [step]);
 
   async function handleSendEmail(e: FormEvent) {
     e.preventDefault();
@@ -51,7 +65,7 @@ export function ForgotPasswordPage() {
       return;
     }
 
-    setMessage("Senha atualizada com sucesso. Você já pode acessar com a nova senha.");
+    navigate("/login", { replace: true });
   }
 
   return (
@@ -59,7 +73,9 @@ export function ForgotPasswordPage() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold text-white">Recuperar conta</h2>
         <p className="mt-1 text-sm text-sf-muted">
-          Informe seu email para receber o link de redefinição de senha.
+          {step === "email"
+            ? "Informe seu email para receber o link de redefinição de senha."
+            : "Crie uma nova senha para sua conta."}
         </p>
       </div>
 
@@ -129,11 +145,20 @@ export function ForgotPasswordPage() {
           </div>
 
           {error ? <p className="text-xs text-sf-danger">{error}</p> : null}
-          {message ? <p className="text-xs text-sf-success">{message}</p> : null}
 
           <button type="submit" className="sf-button-primary w-full" disabled={loading}>
             {loading ? "Atualizando..." : "Salvar nova senha"}
           </button>
+
+          <p className="text-center text-xs text-sf-muted">
+            Lembrou a senha?{" "}
+            <Link
+              to="/login"
+              className="font-medium text-sf-primary-300 hover:text-sf-primary-200"
+            >
+              Voltar para login
+            </Link>
+          </p>
         </form>
       )}
     </div>

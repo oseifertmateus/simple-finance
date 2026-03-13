@@ -26,6 +26,10 @@ body {
   @apply inline-flex items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-sm font-semibold text-sf-muted transition hover:border-sf-border hover:bg-sf-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-primary-500/40;
 }
 
+.sf-button-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg border border-sf-border bg-transparent px-4 py-2 text-sm font-semibold text-sf-text transition hover:bg-sf-surface-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sf-primary-500/40;
+}
+
 .sf-badge {
   @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium;
 }
